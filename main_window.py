@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QMainWindow,
     QFileDialog,
     QMessageBox,
+    QInputDialog,
     QListWidget,
     QListWidgetItem,
     QLineEdit,
@@ -77,8 +78,10 @@ class MainWindow(QMainWindow):
         self.ui.tagPanelAndButton.clicked.connect(lambda: self.set_tag_filter_mode("AND"))  # Переключение по нажатию
         self.ui.tagPanelOrButton.setChecked(self.tag_filter_mode == "OR")  # Устанавливаем состояние для кнопки "OR"
         self.ui.tagPanelOrButton.clicked.connect(lambda: self.set_tag_filter_mode("OR"))  # Переключение по нажатию
+        self.ui.tagRenameButton.clicked.connect(lambda: self.rename_selected_tag())  # Переименование выбранного тега
         self.ui.filterResetButton.clicked.connect(self.reset_filters)  # Кнопка сброса строки поиска и тегов
         self.ui.tagListWidget.itemPressed.connect(self.toggle_tag_checkbox)  # Установка чекбокса при клике на элемент
+        self.ui.tagListWidget.itemDoubleClicked.connect(self.rename_selected_tag)  # Переименование тега двойным кликом
         self.ui.tagListWidget.itemChanged.connect(self.filter_remarks)  # Динамическая фильтрация при выборе тегов
 
         # Включаем шорткаты
@@ -703,6 +706,63 @@ class MainWindow(QMainWindow):
         for i in range(self.ui.tagListWidget.count()):
             self.ui.tagListWidget.item(i).setCheckState(Qt.Unchecked)
         self.filter_remarks()
+
+    def rename_selected_tag(self, item=None):
+        """Переименовывает выбранный тег во всех замечаниях."""
+        if item is None:
+            selected_items = self.ui.tagListWidget.selectedItems()
+            if not selected_items:
+                self.statusBar().showMessage("Выберите тег для переименования.", WAIT)
+                return
+            item = selected_items[0]
+
+        old_tag = item.text()
+        was_checked = item.checkState() == Qt.Checked
+        new_tag, ok = QInputDialog.getText(self, "Переименование тега", "Новое имя тега:", text=old_tag)
+        if not ok:
+            return
+
+        new_tag = new_tag.strip()
+        if not new_tag:
+            QMessageBox.warning(self, "Ошибка", "Имя тега не может быть пустым.")
+            return
+        if "," in new_tag:
+            QMessageBox.warning(self, "Ошибка", "Имя тега не должно содержать запятую.")
+            return
+        if new_tag == old_tag:
+            return
+
+        changed = False
+        for i in range(self.ui.tabWidget.count()):
+            list_widget = self.ui.tabWidget.widget(i)
+            for j in range(list_widget.count()):
+                remark = list_widget.item(j)
+                tags = remark.data(Qt.UserRole + 1) or []
+                if old_tag not in tags:
+                    continue
+
+                renamed_tags = []
+                for tag in tags:
+                    renamed_tag = new_tag if tag == old_tag else tag
+                    if renamed_tag not in renamed_tags:
+                        renamed_tags.append(renamed_tag)
+                remark.setData(Qt.UserRole + 1, renamed_tags)
+                changed = True
+
+        if not changed:
+            return
+
+        self.is_modified = True
+        self.update_window_title()
+        self.update_tag_list()
+        for i in range(self.ui.tagListWidget.count()):
+            tag_item = self.ui.tagListWidget.item(i)
+            if tag_item.text() == new_tag:
+                tag_item.setSelected(True)
+                tag_item.setCheckState(Qt.Checked if was_checked else Qt.Unchecked)
+                break
+        self.filter_remarks()
+        self.statusBar().showMessage(f"Тег \"{old_tag}\" переименован в \"{new_tag}\".", WAIT)
 
     def tab_changed(self):
         self.toggle_tab_buttons()  # Вкл/выкл кнопки редактирования и удаления вкладки

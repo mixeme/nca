@@ -515,6 +515,29 @@ QListWidget::item:selected {
              </property>
             </widget>
            </item>
+           <item>
+            <widget class="QToolButton" name="tagRenameButton">
+             <property name="minimumSize">
+              <size>
+               <width>24</width>
+               <height>24</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>24</width>
+               <height>24</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Переименовать выбранный тег</string>
+             </property>
+             <property name="icon">
+              <iconset>
+               <normaloff>icons/edit.png</normaloff>icons/edit.png</iconset>
+             </property>
+            </widget>
+           </item>
           </layout>
          </item>
          <item>
