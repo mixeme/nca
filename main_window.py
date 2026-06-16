@@ -702,9 +702,8 @@ class MainWindow(QMainWindow):
     def tab_changed(self):
         self.toggle_tab_buttons()  # Вкл/выкл кнопки редактирования и удаления вкладки
         self.toggle_remark_buttons()  # Вкл/выкл кнопки взаимодействия с замечаниями
-        self.ui.searchLineEdit.clear()  # Очищаем строку поискового запроса
-        self.filter_remarks()  # Производим поиск с пустым поисковым запросом, чтобы отобразить скрытые элементы
         self.update_tag_list()  # Обновляем список тегов
+        self.filter_remarks()  # Применяем текущий поисковый запрос к новой вкладке
 
     def filter_remarks(self):
         """Фильтрует замечания на текущей вкладке по поисковому запросу и по тегам."""
