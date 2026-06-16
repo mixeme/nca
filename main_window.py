@@ -848,11 +848,16 @@ class MainWindow(QMainWindow):
     def update_tag_list(self):
         """Обновляет список тегов на панели тегов (tagListWidget)."""
         tags = self.get_tab_tags(self.ui.tabWidget.currentIndex())  # Получаем отсортированный список уникальных тегов
+        selected_tags = {
+            self.ui.tagListWidget.item(i).text()
+            for i in range(self.ui.tagListWidget.count())
+            if self.ui.tagListWidget.item(i).checkState() == Qt.Checked
+        }
         self.ui.tagListWidget.clear()   # Очищаем список перед обновлением
         for tag in tags:
             list_item = QListWidgetItem(tag)  # Создаём очередной элемент списка
             list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)  # Добавляем элементу списка чекбокс
-            list_item.setCheckState(Qt.Unchecked)  # По умолчанию чекбокс не установлен
+            list_item.setCheckState(Qt.Checked if tag in selected_tags else Qt.Unchecked)
             self.ui.tagListWidget.addItem(list_item)
 
     def sort_remarks(self):
