@@ -104,6 +104,7 @@ class MainWindow(QMainWindow):
             load_success = self.read_from_json(filename)
         # Если успешно, то обновляем состояние
         if load_success:
+            self.sort_remarks()  # Сортируем загруженные замечания по алфавиту
             self.current_file = filename  # Устанавливаем файл в качестве текущего
             self.is_modified = False  # Файл только что загружен, изменений нет
             self.update_window_title()  # Обновляем заголовок окна
@@ -292,6 +293,7 @@ class MainWindow(QMainWindow):
 
     def write_to_txt(self, filename):
         """Записывает все замечания в .txt-файл. Информация о категориях не сохраняется."""
+        self.sort_remarks()  # Сохраняем замечания в алфавитном порядке
         try:
             with open(filename, "w", encoding="utf-8") as file:
                 for row in range(self.summaryListWidget.count()):  # Каждое замечание записываем с новой строки
@@ -302,6 +304,7 @@ class MainWindow(QMainWindow):
 
     def write_to_json(self, file_path):
         """Записывает все замечания в .json-файл. Информация о категориях сохраняется."""
+        self.sort_remarks()  # Сохраняем замечания в алфавитном порядке
         # Будем заполнять data для сохранения в .json-файл
         data = []
         # Проходимся по всем вкладкам (категориям), кроме вкладки "Все" (так как нет такой категории)
@@ -373,6 +376,7 @@ class MainWindow(QMainWindow):
         # Обновляем состояние
         self.is_modified = True  # Файл изменился
         self.update_window_title()  # Обновляем заголовок окна
+        self.sort_remarks()  # Сортируем замечания после добавления
         self.update_tag_list()  # Обновляем список на панели тегов
         self.statusBar().showMessage("Добавлено новое замечание.", 3000)
 
@@ -492,6 +496,7 @@ class MainWindow(QMainWindow):
             # Обновляем состояние
             self.is_modified = True  # Файл изменился
             self.update_window_title()  # Обновляем заголовок
+            self.sort_remarks()  # Сортируем замечания после редактирования
             self.update_tag_list()  # Обновляем список на панели тегов
             self.statusBar().showMessage("Замечание обновлено.", WAIT)
 
@@ -789,6 +794,17 @@ class MainWindow(QMainWindow):
             list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)  # Добавляем элементу списка чекбокс
             list_item.setCheckState(Qt.Unchecked)  # По умолчанию чекбокс не установлен
             self.ui.tagListWidget.addItem(list_item)
+
+    def sort_remarks(self):
+        """Сортирует замечания на всех вкладках по алфавиту."""
+        for i in range(self.ui.tabWidget.count()):
+            list_widget = self.ui.tabWidget.widget(i)
+            items = []
+            while list_widget.count():
+                items.append(list_widget.takeItem(0))
+            for item in sorted(items, key=lambda item: item.text().casefold()):
+                list_widget.addItem(item)
+        self.filter_remarks()
 
     def closeEvent(self, event):
         """Запрос подтверждения перед закрытием, если есть несохранённые изменения."""
