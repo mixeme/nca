@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QTabBar,
 )
 
+from app_info import APP_VERSION
 from remark_dialog import RemarkDialog
 from tab_dialog import TabDialog
 from ui_main_window import Ui_MainWindow
@@ -850,7 +851,7 @@ class MainWindow(QMainWindow):
 
     def update_window_title(self):
         """Обновляет заголовок окна, отображает название текущего файла и звёздочку."""
-        base_title = "Помощник нормоконтролёра"
+        base_title = f"Помощник нормоконтролёра [v{APP_VERSION}]"
         file_name = os.path.basename(self.current_file) if self.current_file else "Новый документ"
         modify_marker = "*" if self.is_modified else ""
         self.setWindowTitle(f"{file_name}{modify_marker} – {base_title}")
