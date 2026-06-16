@@ -77,6 +77,7 @@ class MainWindow(QMainWindow):
         self.ui.tagPanelAndButton.clicked.connect(lambda: self.set_tag_filter_mode("AND"))  # Переключение по нажатию
         self.ui.tagPanelOrButton.setChecked(self.tag_filter_mode == "OR")  # Устанавливаем состояние для кнопки "OR"
         self.ui.tagPanelOrButton.clicked.connect(lambda: self.set_tag_filter_mode("OR"))  # Переключение по нажатию
+        self.ui.filterResetButton.clicked.connect(self.reset_filters)  # Кнопка сброса строки поиска и тегов
         self.ui.tagListWidget.itemPressed.connect(self.toggle_tag_checkbox)  # Установка чекбокса при клике на элемент
         self.ui.tagListWidget.itemChanged.connect(self.filter_remarks)  # Динамическая фильтрация при выборе тегов
 
@@ -690,6 +691,13 @@ class MainWindow(QMainWindow):
         self.ui.tagPanelAndButton.setChecked(mode == "AND")  # Меняем состояние кнопки "&&"
         self.ui.tagPanelOrButton.setChecked(mode == "OR")  # Меняем состояние кнопки "||"
         self.filter_remarks()  # Повторно применяем фильтр с новым режимом
+
+    def reset_filters(self):
+        """Сбрасывает поисковую строку и выбранные теги."""
+        self.ui.searchLineEdit.clear()
+        for i in range(self.ui.tagListWidget.count()):
+            self.ui.tagListWidget.item(i).setCheckState(Qt.Unchecked)
+        self.filter_remarks()
 
     def tab_changed(self):
         self.toggle_tab_buttons()  # Вкл/выкл кнопки редактирования и удаления вкладки
