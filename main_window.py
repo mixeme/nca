@@ -214,13 +214,14 @@ class MainWindow(QMainWindow):
     def save_file(self):
         """Сохраняет изменения в текущем файле. Если файл .txt и есть категории — предупреждает о потере категорий."""
         if self.current_file:  # Если не None, значит был открыт какой-то файл, сохраним изменения
+            saved = False
             if self.current_file.endswith(".json"):  # Если .json - сохраняем в json
-                self.write_to_json(self.current_file)
+                saved = self.write_to_json(self.current_file)
             elif self.current_file.endswith(".txt"):  # Если .txt, произойдёт потеря категорий, проверим их наличие
                 has_categories = self.ui.tabWidget.tabBar().count() > 2  # Есть вкладки помимо "Все" и "Без категории"?
                 has_tags = bool(self.get_tab_tags(0))  # Есть ли теги? (bool: непустой список - True, [] - False)
                 if not has_categories and not has_tags:  # Если вкладок и тегов нет, то записываем в .txt
-                    self.write_to_txt(self.current_file)
+                    saved = self.write_to_txt(self.current_file)
                 else:  # Если они были, спрашиваем пользователя, не хочет ли он сменить формат на .json
                     reply = QMessageBox.question(
                         self,
@@ -242,12 +243,14 @@ class MainWindow(QMainWindow):
                             return  # Сохранить не удалось, выходим
                         os.rename(self.current_file, new_filename)  # Меняем расширение текущего файла на уровне ФС
                         self.current_file = new_filename  # Меняем на уровне приложения
-                        self.write_to_json(self.current_file)  # Записываем в .json-файл
+                        saved = self.write_to_json(self.current_file)  # Записываем в .json-файл
                     elif reply == QMessageBox.No:
-                        self.write_to_txt(self.current_file)  # Записываем в .txt-файл
+                        saved = self.write_to_txt(self.current_file)  # Записываем в .txt-файл
                     else:
                         return  # Пользователь отменил сохранение
-            self.load_file(self.current_file)  # На всякий случай перезагрузим файл после сохранения
+            if saved:
+                self.is_modified = False
+                self.update_window_title()
         else:  # Если None, значит был создан новый файл
             self.save_file_as()  # Предлагаем пользователю выбрать имя для сохранения
 
@@ -258,15 +261,16 @@ class MainWindow(QMainWindow):
             self, "Сохранить как", "", "JSON-файлы (*.json);;Текстовые файлы (*.txt)"
         )
         if filename:  # Если путь валидный, определяем формат, в который нужно сохранить
+            saved = False
             if file_ext == "JSON-файлы (*.json)":
                 # Если .json - сохраняем в json
-                self.write_to_json(filename)
+                saved = self.write_to_json(filename)
             elif file_ext == "Текстовые файлы (*.txt)":
                 # Если .txt, может произойти потеря категорий, проверим их наличие
                 has_categories = self.ui.tabWidget.tabBar().count() > 2  # Есть вкладки помимо "Все" и "Без категории"?
                 has_tags = bool(self.get_tab_tags(0))  # Есть ли теги? (bool: непустой список - True, [] - False)
                 if not has_categories and not has_tags:  # Если таких вкладок нет, то записываем в .txt
-                    self.write_to_txt(filename)
+                    saved = self.write_to_txt(filename)
                 else:  # Если они были, спрашиваем пользователя, не хочет ли он сменить формат на .json
                     reply = QMessageBox.question(
                         self,
@@ -287,12 +291,15 @@ class MainWindow(QMainWindow):
                             )
                             return  # Сохранить не удалось, выходим
                         filename = new_filename
-                        self.write_to_json(filename)  # Записываем в .json-файл
+                        saved = self.write_to_json(filename)  # Записываем в .json-файл
                     elif reply == QMessageBox.No:
-                        self.write_to_txt(filename)  # Записываем в .txt-файл
+                        saved = self.write_to_txt(filename)  # Записываем в .txt-файл
                     else:
                         return  # Пользователь отменил сохранение
-            self.load_file(filename)  # На всякий случай перезагрузим файл после сохранения
+            if saved:
+                self.current_file = filename
+                self.is_modified = False
+                self.update_window_title()
 
     def write_to_txt(self, filename):
         """Записывает все замечания в .txt-файл. Информация о категориях не сохраняется."""
@@ -302,8 +309,10 @@ class MainWindow(QMainWindow):
                 for row in range(self.summaryListWidget.count()):  # Каждое замечание записываем с новой строки
                     file.write(self.summaryListWidget.item(row).text() + "\n")
             self.statusBar().showMessage(f"Замечания сохранены в {filename}.", WAIT)
+            return True
         except Exception as e:
             QMessageBox.critical(self, "Ошибка при сохранении файла", f"Не удалось сохранить файл:\n{str(e)}")
+            return False
 
     def write_to_json(self, file_path):
         """Записывает все замечания в .json-файл. Информация о категориях сохраняется."""
@@ -330,8 +339,10 @@ class MainWindow(QMainWindow):
             with open(file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, ensure_ascii=False, indent=4)
             self.statusBar().showMessage(f"Замечания сохранены в {file_path}.", WAIT)
+            return True
         except Exception as e:
             QMessageBox.critical(self, "Ошибка при сохранении файла", f"Не удалось сохранить файл:\n{str(e)}")
+            return False
 
     def revert_file(self):
         """Отменяет все изменения в текущем файле, если у текущего файла есть сохранённая версия."""
