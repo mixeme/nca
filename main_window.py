@@ -1,7 +1,7 @@
 import json
 import os
 
-from PyQt5.QtCore import QSettings, Qt
+from PyQt5.QtCore import QEvent, QSettings, Qt
 from PyQt5.QtGui import QGuiApplication, QIcon, QKeySequence
 from PyQt5.QtWidgets import (
     QMainWindow,
@@ -652,12 +652,22 @@ class MainWindow(QMainWindow):
     def set_list_connects(self, list_widget):
         """Подключает реакции на действия пользователя (клики, выделения) для указанного списка."""
         list_widget.itemDoubleClicked.connect(self.edit_remark)  # Редактирование двойным кликом
+        list_widget.viewport().installEventFilter(self)  # Добавление замечания двойным кликом по пустому месту
         list_widget.setSelectionMode(QListWidget.ExtendedSelection)  # Включаем множественное выделение
         list_widget.itemSelectionChanged.connect(self.toggle_remark_buttons)  # Вкл/выкл кнопки замечаний
         list_widget.setContextMenuPolicy(Qt.CustomContextMenu)  # Включаем контекстное меню (для реакции на ПКМ)
         list_widget.customContextMenuRequested.connect(
             lambda: self.copy_remark() if list_widget.selectedItems() else None
         )  # Устанавливаем копирование выделенных замечаний в качестве реакции на нажатие ПКМ
+
+    def eventFilter(self, obj, event):
+        """Обрабатывает двойной клик по пустому месту в списке замечаний."""
+        if event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton:
+            list_widget = obj.parent()
+            if isinstance(list_widget, QListWidget) and list_widget.itemAt(event.pos()) is None:
+                self.add_remark()
+                return True
+        return super().eventFilter(obj, event)
 
     def toggle_remark_buttons(self):
         """Выключает кнопки взаимодействия с замечаниями, если нет выбранных замечаний. И наоборот."""
