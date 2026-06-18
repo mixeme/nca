@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 
 from PyQt5.QtCore import QEvent, QSettings, Qt
 from PyQt5.QtGui import QGuiApplication, QIcon, QKeySequence
@@ -17,12 +18,18 @@ from PyQt5.QtWidgets import (
 
 from app_info import APP_VERSION
 from remark_dialog import RemarkDialog
+from statistics_dialog import StatisticsDialog
 from tab_dialog import TabDialog
 from ui_main_window import Ui_MainWindow
 from utils import resource_path
 
 
 WAIT = 5000
+
+ROLE_CATEGORY = Qt.UserRole
+ROLE_TAGS = Qt.UserRole + 1
+ROLE_REMARK_ID = Qt.UserRole + 2
+ROLE_COPY_COUNT = Qt.UserRole + 3
 
 
 class MainWindow(QMainWindow):
@@ -56,6 +63,7 @@ class MainWindow(QMainWindow):
         self.ui.fileSaveButton.clicked.connect(self.save_file)  # Кнопка "Сохранить документ"
         self.ui.fileSaveAsButton.clicked.connect(self.save_file_as)  # Кнопка "Сохранить документ как"
         self.ui.fileRevertButton.clicked.connect(self.revert_file)  # Кнопка "Отменить изменения"
+        self.ui.statisticsButton.clicked.connect(self.show_statistics)  # Кнопка "Статистика копирования"
         # Работа с вкладками
         self.ui.tabAddButton.clicked.connect(self.add_tab)  # Кнопка "Добавить вкладку"
         self.ui.tabRemoveButton.clicked.connect(self.remove_tab)  # Кнопка "Удалить вкладку"
@@ -93,6 +101,97 @@ class MainWindow(QMainWindow):
             self.load_file(last_file)  # Если этот файл существует, то загружаем его
         else:
             self.create_file()  # Иначе создаём новый
+
+    def _new_remark_id(self):
+        return str(uuid.uuid4())
+
+    def _get_copy_count(self, item):
+        count = item.data(ROLE_COPY_COUNT)
+        return count if count is not None else 0
+
+    def _set_copy_count(self, item, count):
+        item.setData(ROLE_COPY_COUNT, count)
+
+    def _create_remark_item(self, text, category, tags, remark_id=None, copy_count=0):
+        item = QListWidgetItem(text)
+        item.setData(ROLE_CATEGORY, category)
+        item.setData(ROLE_TAGS, tags)
+        item.setData(ROLE_REMARK_ID, remark_id or self._new_remark_id())
+        item.setData(ROLE_COPY_COUNT, copy_count)
+        return item
+
+    def _clone_remark_item(self, item):
+        clone = QListWidgetItem(item.text())
+        clone.setData(ROLE_CATEGORY, item.data(ROLE_CATEGORY))
+        clone.setData(ROLE_TAGS, item.data(ROLE_TAGS))
+        clone.setData(ROLE_REMARK_ID, item.data(ROLE_REMARK_ID))
+        clone.setData(ROLE_COPY_COUNT, item.data(ROLE_COPY_COUNT))
+        return clone
+
+    def _find_clone_by_id(self, remark_id):
+        for i in range(self.summaryListWidget.count()):
+            clone = self.summaryListWidget.item(i)
+            if clone.data(ROLE_REMARK_ID) == remark_id:
+                return clone
+        return None
+
+    def _find_original_by_id(self, remark_id):
+        for i in range(self.ui.tabWidget.count()):
+            tab_name = self.ui.tabWidget.tabText(i)
+            if tab_name == "Все":
+                continue
+            list_widget = self.ui.tabWidget.widget(i)
+            for j in range(list_widget.count()):
+                item = list_widget.item(j)
+                if item.data(ROLE_REMARK_ID) == remark_id:
+                    return item
+        return None
+
+    def _sync_copy_count_by_id(self, remark_id, count):
+        original = self._find_original_by_id(remark_id)
+        clone = self._find_clone_by_id(remark_id)
+        if original:
+            self._set_copy_count(original, count)
+        if clone:
+            self._set_copy_count(clone, count)
+
+    def _increment_copy_count(self, item):
+        remark_id = item.data(ROLE_REMARK_ID)
+        if not remark_id:
+            return
+        original = self._find_original_by_id(remark_id)
+        source = original if original else item
+        self._sync_copy_count_by_id(remark_id, self._get_copy_count(source) + 1)
+
+    def reset_copy_statistics(self):
+        """Сбрасывает статистику копирования для всех замечаний."""
+        for i in range(self.ui.tabWidget.count()):
+            list_widget = self.ui.tabWidget.widget(i)
+            for j in range(list_widget.count()):
+                self._set_copy_count(list_widget.item(j), 0)
+        self.is_modified = True
+        self.update_window_title()
+
+    def get_copy_statistics(self):
+        """Возвращает статистику копирования замечаний текущего файла."""
+        stats = []
+        for i in range(self.ui.tabWidget.count()):
+            tab_name = self.ui.tabWidget.tabText(i)
+            if tab_name == "Все":
+                continue
+            list_widget = self.ui.tabWidget.widget(i)
+            for j in range(list_widget.count()):
+                item = list_widget.item(j)
+                stats.append({
+                    "text": item.text(),
+                    "category": item.data(ROLE_CATEGORY),
+                    "copy_count": self._get_copy_count(item),
+                })
+        return stats
+
+    def show_statistics(self):
+        """Открывает окно со статистикой копирования замечаний."""
+        StatisticsDialog(self).exec()
 
 
     def load_file(self, filename):
@@ -168,13 +267,9 @@ class MainWindow(QMainWindow):
                 for text in remarks:
                     if not text.strip():
                         continue  # Не добавляем пустые замечания
-                    # Создаём элемент списка
-                    item = QListWidgetItem(text)  # Текст замечания (очередная строка .txt-файла)
-                    item.setData(Qt.UserRole, "Без категории")  # Категория (для .txt всегда "Без категории")
-                    item.setData(Qt.UserRole + 1, [])  # Теги (для .txt всегда пустой список)
-                    # Добавляем этот элемент в два списка
-                    self.uncategorizedListWidget.addItem(item)  # Добавляем в список на вкладке "Без категории"
-                    self.summaryListWidget.addItem(item.clone())  # Клона добавляем в список на вкладке "Все"
+                    item = self._create_remark_item(text, "Без категории", [])
+                    self.uncategorizedListWidget.addItem(item)
+                    self.summaryListWidget.addItem(self._clone_remark_item(item))
             return True
         except FileNotFoundError:
             return False
@@ -186,28 +281,28 @@ class MainWindow(QMainWindow):
                 data = json.load(file)  # список словарей [{"category": ..., "text": ..., "tags": ...}]
                 categories = {}  # Собираем категории
                 for item in data:
-                    category = item.get('category', "Без категории")  # Получаем категорию
-                    text = item.get('text', "").strip()  # Получаем текст
-                    tags = item.get('tags', [])  # Получаем теги
+                    category = item.get("category", "Без категории")
+                    text = item.get("text", "").strip()
+                    tags = item.get("tags", [])
+                    remark_id = item.get("id") or self._new_remark_id()
+                    copy_count = item.get("copy_count", 0)
                     if not text:
                         continue  # Не добавляем пустые замечания
-                    if category == "Без категории":  # Если в файле в качестве категории встретили "Без категории", то
-                        list_widget = self.uncategorizedListWidget  # Берём в качестве list_widget уже имеющийся список
-                    else:  # Для всех остальных категорий
-                        if category not in categories:  # Если такую категорию встретили впервые
-                            list_widget = QListWidget()  # Создаём новый список
-                            self.set_list_connects(list_widget)  # Подключаем реакции для этого списка
-                            self.ui.tabWidget.insertTab(self.ui.tabWidget.count() - 1, list_widget, category)  # Вкладка
-                            categories[category] = list_widget  # Запоминаем список для повторных обращений
-                        else:  # Если такую категорию уже встречали
-                            list_widget = categories[category]  # Берём в качестве list_widget уже имеющийся список
-                    # Создаём элемент списка
-                    item = QListWidgetItem(text)  # Текст замечания
-                    item.setData(Qt.UserRole, category)  # Категория
-                    item.setData(Qt.UserRole + 1, tags)  # Теги
-                    # Добавляем этот элемент в два списка
-                    list_widget.addItem(item)  # Добавляем в список на вкладке категории
-                    self.summaryListWidget.addItem(item.clone())  # Клона добавляем в список на вкладке "Все"
+                    if category == "Без категории":
+                        list_widget = self.uncategorizedListWidget
+                    else:
+                        if category not in categories:
+                            list_widget = QListWidget()
+                            self.set_list_connects(list_widget)
+                            self.ui.tabWidget.insertTab(self.ui.tabWidget.count() - 1, list_widget, category)
+                            categories[category] = list_widget
+                        else:
+                            list_widget = categories[category]
+                    remark_item = self._create_remark_item(
+                        text, category, tags, remark_id=remark_id, copy_count=copy_count
+                    )
+                    list_widget.addItem(remark_item)
+                    self.summaryListWidget.addItem(self._clone_remark_item(remark_item))
             return True
         except (FileNotFoundError, json.JSONDecodeError):
             return False
@@ -328,13 +423,15 @@ class MainWindow(QMainWindow):
             # На каждой вкладке проходимся по списку замечаний заполняя массив remarks
             list_widget = self.ui.tabWidget.widget(i)
             for j in range(list_widget.count()):
-                item = list_widget.item(j)  # Получаем элемент списка
-                text = item.text()  # Получаем текст замечания
-                tags = item.data(Qt.UserRole + 1) # Получаем теги
+                item = list_widget.item(j)
+                text = item.text()
+                tags = item.data(ROLE_TAGS)
                 data.append({
+                    "id": item.data(ROLE_REMARK_ID),
                     "category": tab_name,
                     "text": text,
-                    "tags": tags
+                    "tags": tags,
+                    "copy_count": self._get_copy_count(item),
                 })
         try:
             with open(file_path, 'w', encoding='utf-8') as file:
@@ -381,13 +478,9 @@ class MainWindow(QMainWindow):
                 break
         else:
             return  # Если не нашли (break не отработал), то выходим, но вообще такая ситуация невозможна
-        # Создаём элемент списка
-        item = QListWidgetItem(text)  # Текст, введённый пользователем, сохраняем в качестве текста элемента
-        item.setData(Qt.UserRole, category)  # Категорию, выбранную пользователем, сохраняем в data элемента
-        item.setData(Qt.UserRole + 1, tags)  # Теги, введённые пользователем, сохраняем в data элемента
-        # Добавляем этот элемент в два списка
-        list_widget.addItem(item)  # Добавляем в список на вкладке выбранной категории
-        self.summaryListWidget.addItem(item.clone())  # Клонируем и добавляем клона в список на вкладке "Все"
+        item = self._create_remark_item(text, category, tags)
+        list_widget.addItem(item)
+        self.summaryListWidget.addItem(self._clone_remark_item(item))
         # Обновляем состояние
         self.is_modified = True  # Файл изменился
         self.update_window_title()  # Обновляем заголовок окна
@@ -407,29 +500,24 @@ class MainWindow(QMainWindow):
             return
         # Для каждого выбранного замечания
         for item in selected_items:
-            text = item.text()  # Запоминаем текст замечания
-            category = item.data(Qt.UserRole)  # Запоминаем категорию замечания
-            # Удаляем клона замечания со вкладки "Все"
+            remark_id = item.data(ROLE_REMARK_ID)
             for i in reversed(range(self.summaryListWidget.count())):
                 clone = self.summaryListWidget.item(i)
-                if clone.text() == text and clone.data(Qt.UserRole) == category:
-                    self.summaryListWidget.takeItem(i)  # Удаляем клона на вкладке "Все"
+                if clone.data(ROLE_REMARK_ID) == remark_id:
+                    self.summaryListWidget.takeItem(i)
                     break
-            # Если мы на вкладке "Все", ищем и удаляем оригинал замечания
             if tab_name == "Все":
+                category = item.data(ROLE_CATEGORY)
                 for i in range(self.ui.tabWidget.count()):
-                    # Ищем вкладку, на которой находится оригинал, по категории
                     if self.ui.tabWidget.tabText(i) == category:
-                        list_widget = self.ui.tabWidget.widget(i)
-                        for j in reversed(range(list_widget.count())):
-                            # Ищем само замечание по тексту
-                            if list_widget.item(j).text() == text:
-                                list_widget.takeItem(j)  # Удаляем оригинал замечания
+                        category_list = self.ui.tabWidget.widget(i)
+                        for j in reversed(range(category_list.count())):
+                            if category_list.item(j).data(ROLE_REMARK_ID) == remark_id:
+                                category_list.takeItem(j)
                                 break
                         break
-            # Иначе мы уже на нужной вкладке, просто удаляем оригинал
             else:
-                list_widget.takeItem(list_widget.row(item))  # Удаляем оригинал замечания
+                list_widget.takeItem(list_widget.row(item))
         # Обновляем состояние
         self.is_modified = True  # Файл изменился
         self.update_window_title()  # Обновляем заголовок
@@ -448,65 +536,59 @@ class MainWindow(QMainWindow):
             return
         # Для каждого выбранного замечания
         for item in selected_items:
-            old_text = item.text()  # Старый текст
-            old_category = item.data(Qt.UserRole)  # Старая категория
-            old_tags = item.data(Qt.UserRole + 1)  # Старые теги
-            dialog = RemarkDialog(self, text=old_text, category=old_category, tags=old_tags)  # Окно редактирования
+            old_text = item.text()
+            old_category = item.data(ROLE_CATEGORY)
+            old_tags = item.data(ROLE_TAGS)
+            old_remark_id = item.data(ROLE_REMARK_ID)
+            old_copy_count = self._get_copy_count(item)
+            dialog = RemarkDialog(self, text=old_text, category=old_category, tags=old_tags)
             if not dialog.exec():
-                continue  # Если пользователь нажал "Отмена" или просто закрыл окно, то ничего не делаем
-            new_text, new_category, new_tags = dialog.get_data()  # Получаем новые данные
+                continue
+            new_text, new_category, new_tags = dialog.get_data()
             if not new_text:
-                continue  # Не добавляем пустые замечания
-            # Находим клона замечания на вкладке "Все" и обновляем его данные
+                continue
             for i in range(self.summaryListWidget.count()):
                 clone = self.summaryListWidget.item(i)
-                if clone.text() == old_text and clone.data(Qt.UserRole) == old_category:
-                    clone.setText(new_text)  # Обновляем текст
-                    clone.setData(Qt.UserRole, new_category)  # Обновляем категорию
-                    clone.setData(Qt.UserRole + 1, new_tags)  # Обновляем теги
+                if clone.data(ROLE_REMARK_ID) == old_remark_id:
+                    clone.setText(new_text)
+                    clone.setData(ROLE_CATEGORY, new_category)
+                    clone.setData(ROLE_TAGS, new_tags)
                     break
-            # Если мы на вкладке "Все", ищем и обновляем оригинал замечания
             if tab_name == "Все":
                 for i in range(self.ui.tabWidget.count()):
-                    # Ищем вкладку, на которой находится оригинал, и удаляем его оттуда, либо просто меняем текст
                     if self.ui.tabWidget.tabText(i) == old_category:
                         orig_list_widget = self.ui.tabWidget.widget(i)
                         for j in reversed(range(orig_list_widget.count())):
-                            # Ищем само замечание по тексту
-                            if orig_list_widget.item(j).text() == old_text:
+                            if orig_list_widget.item(j).data(ROLE_REMARK_ID) == old_remark_id:
                                 if new_category == old_category:
-                                    orig_list_widget.item(j).setText(new_text)  # Обновляем текст оригинала замечания
-                                    orig_list_widget.item(j).setData(Qt.UserRole + 1, new_tags)  # Обновляем теги
+                                    orig_list_widget.item(j).setText(new_text)
+                                    orig_list_widget.item(j).setData(ROLE_TAGS, new_tags)
                                 else:
-                                    orig_list_widget.takeItem(j)  # Удаляем оригинал замечания
+                                    orig_list_widget.takeItem(j)
                                 break
                         break
-                # Если категория изменилась, то добавляем в новую, иначе ничего
                 if new_category != old_category:
                     for i in range(self.ui.tabWidget.count()):
-                        # Ищем вкладку, куда нужно перенести оригинал, и добавляем его туда
                         if self.ui.tabWidget.tabText(i) == new_category:
-                            new_item = QListWidgetItem(new_text)  # Создаём элемент списка, записываем текст
-                            new_item.setData(Qt.UserRole, new_category)  # Записываем категорию
-                            new_item.setData(Qt.UserRole + 1, new_tags)  # Записываем теги
-                            self.ui.tabWidget.widget(i).addItem(new_item)  # Добавляем элемент в список
+                            new_item = self._create_remark_item(
+                                new_text, new_category, new_tags,
+                                remark_id=old_remark_id, copy_count=old_copy_count
+                            )
+                            self.ui.tabWidget.widget(i).addItem(new_item)
                             break
-            # Иначе мы уже на нужной вкладке, просто обновляем оригинал
             else:
-                # Если категория не изменилась, то просто меняем текст и теги
                 if new_category == old_category:
-                    item.setText(new_text)  # Обновляем текст
-                    item.setData(Qt.UserRole + 1, new_tags)  # Обновляем теги
-                # Иначе удаляем из старой категории и добавляем в новую
+                    item.setText(new_text)
+                    item.setData(ROLE_TAGS, new_tags)
                 else:
                     list_widget.takeItem(list_widget.row(item))
                     for i in range(self.ui.tabWidget.count()):
-                        # Ищем вкладку, куда нужно перенести замечание
                         if self.ui.tabWidget.tabText(i) == new_category:
-                            new_item = QListWidgetItem(new_text)  # Создаём элемент списка, записываем текст
-                            new_item.setData(Qt.UserRole, new_category)  # Записываем категорию
-                            new_item.setData(Qt.UserRole + 1, new_tags)  # Записываем теги
-                            self.ui.tabWidget.widget(i).addItem(new_item)  # Добавляем элемент в список
+                            new_item = self._create_remark_item(
+                                new_text, new_category, new_tags,
+                                remark_id=old_remark_id, copy_count=old_copy_count
+                            )
+                            self.ui.tabWidget.widget(i).addItem(new_item)
                             break
             # Обновляем состояние
             self.is_modified = True  # Файл изменился
@@ -525,6 +607,10 @@ class MainWindow(QMainWindow):
         if selected_items:
             remarks_text = "\n".join(item.text() for item in selected_items)
             QGuiApplication.clipboard().setText(remarks_text)
+            for item in selected_items:
+                self._increment_copy_count(item)
+            self.is_modified = True
+            self.update_window_title()
             self.statusBar().showMessage("Выбранные замечания скопированы в буфер обмена.", WAIT)
 
     def add_tab(self):
@@ -560,15 +646,12 @@ class MainWindow(QMainWindow):
         # Определяем, с каким списком работаем
         list_widget = self.ui.tabWidget.widget(current_index)
         for i in range(list_widget.count()):
-            # Для каждого замечания из списка на текущей вкладке
             item = list_widget.item(i)
-            text = item.text()  # Получаем текст замечания
-            category = item.data(Qt.UserRole)  # И его категорию
+            remark_id = item.data(ROLE_REMARK_ID)
             for j in reversed(range(self.summaryListWidget.count())):
-                # Ищем клона этого замечания на вкладке "Все"
                 clone = self.summaryListWidget.item(j)
-                if clone.text() == text and clone.data(Qt.UserRole) == category:
-                    self.summaryListWidget.takeItem(j)  # И удаляем его с вкладки "Все"
+                if clone.data(ROLE_REMARK_ID) == remark_id:
+                    self.summaryListWidget.takeItem(j)
                     break
         self.ui.tabWidget.removeTab(current_index) # Удаляем текущую вкладку
         # Обновляем состояние
@@ -601,13 +684,12 @@ class MainWindow(QMainWindow):
         list_widget = self.ui.tabWidget.widget(current_index)
         for i in range(list_widget.count()):
             item = list_widget.item(i)
-            item.setData(Qt.UserRole, new_name)
-            # Обновляем клонов этих замечаний со вкладки "Все"
-            text = item.text()
+            item.setData(ROLE_CATEGORY, new_name)
+            remark_id = item.data(ROLE_REMARK_ID)
             for j in range(self.summaryListWidget.count()):
                 clone = self.summaryListWidget.item(j)
-                if clone.text() == text and clone.data(Qt.UserRole) == old_name:
-                    clone.setData(Qt.UserRole, new_name)
+                if clone.data(ROLE_REMARK_ID) == remark_id:
+                    clone.setData(ROLE_CATEGORY, new_name)
                     break
         # Если позиция изменилась, перемещаем вкладку и открываем её
         if new_position != current_index:
@@ -647,12 +729,10 @@ class MainWindow(QMainWindow):
             # На других вкладках - очищаем список на текущей вкладке, и удаляем клонов этих замечаний со вкладки "Все"
             list_widget = self.ui.tabWidget.widget(current_index)
             for i in range(list_widget.count()):
-                # Для каждого замечания на текущей вкладке
-                text = list_widget.item(i).text()
+                remark_id = list_widget.item(i).data(ROLE_REMARK_ID)
                 for j in reversed(range(self.summaryListWidget.count())):
-                    # Ищем на вкладке "Все" клона этого замечания и удаляем
                     clone = self.summaryListWidget.item(j)
-                    if clone.text() == text and clone.data(Qt.UserRole) == tab_name:
+                    if clone.data(ROLE_REMARK_ID) == remark_id:
                         self.summaryListWidget.takeItem(j)
                         break
             list_widget.clear()  # Когда замечания со вкладки "Все" удалили, очищаем список на текущей вкладке
@@ -759,7 +839,7 @@ class MainWindow(QMainWindow):
             list_widget = self.ui.tabWidget.widget(i)
             for j in range(list_widget.count()):
                 remark = list_widget.item(j)
-                tags = remark.data(Qt.UserRole + 1) or []
+                tags = remark.data(ROLE_TAGS) or []
                 if old_tag not in tags:
                     continue
 
@@ -768,7 +848,7 @@ class MainWindow(QMainWindow):
                     renamed_tag = new_tag if tag == old_tag else tag
                     if renamed_tag not in renamed_tags:
                         renamed_tags.append(renamed_tag)
-                remark.setData(Qt.UserRole + 1, renamed_tags)
+                remark.setData(ROLE_TAGS, renamed_tags)
                 changed = True
 
         if not changed:
@@ -808,7 +888,7 @@ class MainWindow(QMainWindow):
         for i in range(list_widget.count()):
             item = list_widget.item(i)  # Очередной элемент списка
             item_text = item.text().lower()  # Текст замечания в нижнем регистре
-            item_tags = item.data(Qt.UserRole + 1)  # Теги замечания
+            item_tags = item.data(ROLE_TAGS)  # Теги замечания
             # Проверяем, содержится ли в тексте замечания введённый пользователем поисковый запрос
             text_matches = query in item.text().lower() if query else True
             # Если режим "И", то проверяем содержатся ли в тегах замечания все теги, выбранные пользователем
@@ -862,7 +942,7 @@ class MainWindow(QMainWindow):
         tags = set()  # Используем set(), чтобы отбрасывать повторы
         for i in range(list_widget.count()):
             item = list_widget.item(i)
-            item_tags = item.data(Qt.UserRole + 1)
+            item_tags = item.data(ROLE_TAGS)
             if item_tags:
                 tags.update(item_tags)
         return sorted(tags)

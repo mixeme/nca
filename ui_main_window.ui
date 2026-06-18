@@ -245,6 +245,35 @@ QListWidget::item:selected {
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="statisticsButton">
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="toolTip">
+         <string>Статистика копирования</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset>
+          <normaloff>icons/view-statistics.png</normaloff>icons/view-statistics.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>24</width>
+          <height>24</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="Line" name="lineBeforeTabButtons">
         <property name="minimumSize">
          <size>
