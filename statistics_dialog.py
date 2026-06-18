@@ -27,7 +27,13 @@ class StatisticsDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setWordWrap(False)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.table.verticalHeader().setDefaultSectionSize(
+            self.table.fontMetrics().lineSpacing() + 4
+        )
+        self.table.setStyleSheet("QTableWidget::item { padding: 1px 4px; }")
         self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
 
