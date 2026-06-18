@@ -46,6 +46,7 @@ class MainWindow(QMainWindow):
         last_file = self.settings.value("last_file", "")  # Из настроек узнаём путь к последнему файлу
         tag_panel_visible = self.settings.value("tag_panel_visible", False, type=bool)  # Видимость панели тегов
         self.tag_filter_mode = self.settings.value("tag_filter_mode", "AND")  # Режим фильтрации (И/ИЛИ)
+        self.sort_mode = self.settings.value("sort_mode", "alphabetic")  # Режим сортировки замечаний
 
         self.ui.tabWidget.setTabBar(LockedTabBar())  # Устанавливаем кастомный QTabBar с закреплёнными вкладками
         self.ui.tabWidget.setMovable(True)  # Включаем возможность перетаскивать вкладки
@@ -74,6 +75,8 @@ class MainWindow(QMainWindow):
         self.ui.remarkRemoveButton.clicked.connect(self.remove_remark)  # Кнопка "Удалить выбранные замечания"
         self.ui.remarkEditButton.clicked.connect(self.edit_remark)  # Кнопка "Редактировать выбранные замечания"
         self.ui.remarkCopyButton.clicked.connect(self.copy_remark)  # Кнопка "Копировать выбранные замечания"
+        self.ui.sortModeButton.clicked.connect(self.toggle_sort_mode)  # Кнопка переключения режима сортировки
+        self.set_sort_mode(self.sort_mode, resort=False)  # Восстанавливаем режим сортировки из настроек
         self.ui.listClearButton.clicked.connect(self.clear_list)  # Кнопка "Очистить список"
         # Поиск
         self.ui.searchLineEdit.addAction(QIcon(resource_path("icons/find.png")), QLineEdit.LeadingPosition)  # Иконка
@@ -171,6 +174,8 @@ class MainWindow(QMainWindow):
                 self._set_copy_count(list_widget.item(j), 0)
         self.is_modified = True
         self.update_window_title()
+        if self.sort_mode == "copy_count":
+            self.sort_remarks()
 
     def get_copy_statistics(self):
         """Возвращает статистику копирования замечаний текущего файла."""
@@ -611,6 +616,8 @@ class MainWindow(QMainWindow):
                 self._increment_copy_count(item)
             self.is_modified = True
             self.update_window_title()
+            if self.sort_mode == "copy_count":
+                self.sort_remarks()
             self.statusBar().showMessage("Выбранные замечания скопированы в буфер обмена.", WAIT)
 
     def add_tab(self):
@@ -802,6 +809,28 @@ class MainWindow(QMainWindow):
         self.ui.tagPanelOrButton.setChecked(mode == "OR")  # Меняем состояние кнопки "||"
         self.filter_remarks()  # Повторно применяем фильтр с новым режимом
 
+    def toggle_sort_mode(self):
+        """Переключает режим сортировки замечаний по нажатию кнопки."""
+        mode = "copy_count" if self.ui.sortModeButton.isChecked() else "alphabetic"
+        self.set_sort_mode(mode)
+
+    def set_sort_mode(self, mode, resort=True):
+        """Устанавливает режим сортировки замечаний и обновляет состояние кнопки."""
+        self.sort_mode = mode
+        self.ui.sortModeButton.blockSignals(True)
+        self.ui.sortModeButton.setChecked(mode == "copy_count")
+        icon_name = "view-statistics.png" if mode == "copy_count" else "view-sort-ascending.png"
+        self.ui.sortModeButton.setIcon(QIcon(resource_path(f"icons/{icon_name}")))
+        tooltip = (
+            "Сортировка: по частоте копирования"
+            if mode == "copy_count"
+            else "Сортировка: по алфавиту"
+        )
+        self.ui.sortModeButton.setToolTip(tooltip)
+        self.ui.sortModeButton.blockSignals(False)
+        if resort:
+            self.sort_remarks()
+
     def reset_filters(self):
         """Сбрасывает поисковую строку и выбранные теги."""
         self.ui.searchLineEdit.clear()
@@ -962,14 +991,19 @@ class MainWindow(QMainWindow):
             list_item.setCheckState(Qt.Checked if tag in selected_tags else Qt.Unchecked)
             self.ui.tagListWidget.addItem(list_item)
 
+    def _remark_sort_key(self, item):
+        if self.sort_mode == "copy_count":
+            return (-self._get_copy_count(item), item.text().casefold())
+        return (item.text().casefold(),)
+
     def sort_remarks(self):
-        """Сортирует замечания на всех вкладках по алфавиту."""
+        """Сортирует замечания на всех вкладках согласно выбранному режиму."""
         for i in range(self.ui.tabWidget.count()):
             list_widget = self.ui.tabWidget.widget(i)
             items = []
             while list_widget.count():
                 items.append(list_widget.takeItem(0))
-            for item in sorted(items, key=lambda item: item.text().casefold()):
+            for item in sorted(items, key=self._remark_sort_key):
                 list_widget.addItem(item)
         self.filter_remarks()
 
@@ -992,6 +1026,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("last_file", self.current_file)  # Сохраняем в настройках текущий файл как последний
         self.settings.setValue("tag_panel_visible", self.ui.tagPanelWidget.isVisible())  # Видимость панели тегов
         self.settings.setValue("tag_filter_mode", self.tag_filter_mode)  # Режим фильтрации по тегам: "AND" или "OR"
+        self.settings.setValue("sort_mode", self.sort_mode)  # Режим сортировки замечаний
         # Закрываем окно
         event.accept()
 

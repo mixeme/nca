@@ -721,6 +721,41 @@ QListWidget::item:selected {
            </widget>
           </item>
           <item>
+           <widget class="QPushButton" name="sortModeButton">
+            <property name="maximumSize">
+             <size>
+              <width>32</width>
+              <height>32</height>
+             </size>
+            </property>
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Сортировка: по алфавиту</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="icon">
+             <iconset>
+              <normaloff>icons/view-sort-ascending.png</normaloff>icons/view-sort-ascending.png</iconset>
+            </property>
+            <property name="iconSize">
+             <size>
+              <width>24</width>
+              <height>24</height>
+             </size>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="checked">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
            <spacer name="centralDownSpacer">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>
