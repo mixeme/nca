@@ -5,8 +5,11 @@ cd "$(dirname "$0")" || exit 1;
 cd ..;
 echo "Project directory: $PWD";
 
+# Архитектура процессора из окружения
+ARCH="$(uname -m)";
+
 # Имя итогового файла
-BIN_NAME="nca";
+BIN_NAME="nca-lnx-${ARCH}";
 
 # Запускаем PyInstaller
 python3 -m PyInstaller \

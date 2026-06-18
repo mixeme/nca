@@ -5,8 +5,11 @@ cd /d %~dp0
 cd ..
 echo Project directory: %cd%
 
+:: Архитектура процессора из окружения
+for /f "delims=" %%A in ('powershell -NoProfile -Command "$a=$env:PROCESSOR_ARCHITECTURE; if ($a -eq 'x86' -and $env:PROCESSOR_ARCHITEW6432) { $a=$env:PROCESSOR_ARCHITEW6432 }; $a.ToLower()"') do set ARCH=%%A
+
 :: Имя итогового файла
-set BIN_NAME=nca
+set BIN_NAME=nca-win-%ARCH%
 
 :: Запускаем PyInstaller
 python -m PyInstaller ^
